@@ -1,144 +1,150 @@
 # locked-in
 
-A command-line workout tracker for logging your own training data and understanding whether you're actually progressing — inspired by the progress charts found in fitness tracking apps.
+A command-line workout tracker that turns a personal training log into clear progress insights: trends, personal bests, plateaus and regressions.
 
-## Purpose
+## Why this project
 
-A workout log of dates, exercises, weights and reps is just a table of numbers. locked-in turns it into an answer to one question: **"Am I actually getting better?"**
+A workout log is easy to collect but harder to interpret. `locked-in` answers a practical question:
 
-## Problem
+> **Am I actually getting better?**
 
-Raw workout logs are rarely clean, and even when they are, it's hard to tell from a list of sessions whether an exercise is genuinely improving, stuck at a plateau, or quietly regressing. Most tracker demos also ship pre-populated with sample data, which hides how the app actually behaves for a brand-new user with nothing logged yet.
+The app starts with an empty workout log and derives every result from the data the user records. No demo data is loaded automatically and no analysis is hardcoded.
 
-## Solution
+## Core workflow
 
-locked-in starts completely empty. Every workout, personal best, trend and plateau/regression flag comes exclusively from what the user logs through the CLI. All ten menu options read from the same in-memory list of workouts — there's a single source of truth, not a separate dataset per feature.
-
+```text
+Log workout
+    ↓
+data/workout_log.csv
+    ↓
+clean + validate
+    ↓
+progression / records / summary
+    ↓
+progress insights
 ```
-User input (option 5)
-        ↓
-data/workout_log.csv   (single source of truth, on disk and in memory)
-        ↓
-progression.py / records.py / summary.py / export.py
-        ↓
-options 1-4, 7-10 (all read-only views over the same data)
+
+The CLI is organized around four user intentions:
+
+```text
+LOCKED-IN
+├── Log workout
+├── View progress
+│   ├── Progress summary
+│   ├── Exercise progression
+│   ├── Personal bests
+│   ├── Plateaus
+│   ├── Regressions
+│   └── Compare exercises
+├── Workout history
+└── Profile & data
+    ├── View / update profile
+    └── Export workout data
 ```
 
 ## Features
 
-- Starts genuinely empty: zero workouts, zero personal bests, zero trends, until the user logs something
-- Log new workouts directly from the CLI (option 5), appended to the CSV log
-- View month-by-month progression for any exercise, with automatic Progressing / Plateau / Regressing classification
-- Personal bests (max weight, max reps) per exercise, updated live as soon as a new workout is logged
-- New personal record detection with short motivational feedback
-- Full workout history, sortable list of everything logged
-- Side-by-side comparison between two exercises
-- Overall progress summary (workout count, exercises tracked, personal bests, plateaus, regressions)
-- Export the current log to a timestamped CSV backup
-- A simple user profile (name, age, sex, training goal) created on first run and reused on future sessions
-- Graceful empty-state and error handling everywhere — no crashes on missing data
+- Log workouts directly from the CLI
+- Track weighted and bodyweight exercises
+- View monthly progression for a single exercise
+- Classify recent performance as `Progressing`, `Plateau` or `Regressing`
+- Track personal bests for weight and reps
+- Detect a new personal record immediately after logging a workout
+- Review complete workout history
+- Compare two exercises side by side
+- View an overall progress summary
+- Export the current workout log to a timestamped CSV backup
+- Create and update a local user profile
+- Handle empty, missing or partially invalid data without crashing
 
-## Technologies
+## Tech stack
 
 - Python 3.10+
-- Standard library only (`csv`, `json`, `datetime`, `collections`) — no external dependencies
+- Python standard library only
+- CSV for workout persistence
+- JSON for profile persistence
 
-## Project Structure
+No external dependencies are required.
 
-```
+## Project structure
+
+```text
 locked-in/
 ├── data/
-│   ├── workout_log.csv         # the user's real data - starts empty (header only)
-│   ├── sample_workout_log.csv  # optional demo dataset, not loaded automatically
-│   ├── profile.json            # created on first run, not tracked in git
-│   └── exports/                # created on demand by option 10, not tracked in git
+│   ├── workout_log.csv         # generated locally on first run; ignored by git
+│   ├── profile.json            # generated locally; ignored by git
+│   └── exports/                # generated on demand; ignored by git
 ├── src/
 │   └── locked_in/
-│       ├── loader.py        # reading, cleaning and validating the CSV data
-│       ├── progression.py   # monthly averages + trend classification
-│       ├── records.py       # personal bests + new-record detection
-│       ├── entry.py         # logging a new workout from the CLI
-│       ├── summary.py       # progress summary + exercise comparison
-│       ├── export.py        # exporting the current log to a CSV backup
-│       ├── profile.py       # user profile creation and persistence
-│       └── menu.py          # CLI menu - routes choices, no calculations
-├── main.py                  # entry point
-├── README.md
+│       ├── loader.py           # load, clean and validate workout data
+│       ├── entry.py            # add new workouts
+│       ├── progression.py      # monthly averages and trend detection
+│       ├── records.py          # personal bests and record detection
+│       ├── summary.py          # overview and exercise comparison
+│       ├── export.py           # CSV export
+│       ├── profile.py          # profile persistence
+│       └── menu.py             # CLI navigation and output formatting
+├── main.py                     # application entry point
 ├── requirements.txt
-└── .gitignore
+└── README.md
 ```
 
-## How It Works
+## How the analysis works
 
-1. `main.py` loads `data/workout_log.csv` through `loader.py`. On a fresh install this file only has a header row, so the app starts with zero workouts - that's a normal state, not an error, and nothing is hardcoded to hide it.
-2. Every row is validated and normalized; rows that can't be repaired are skipped and reported at startup instead of crashing the program.
-3. On first run, `profile.py` interactively creates a small profile and saves it to `data/profile.json`; on later runs it's loaded automatically and the user is greeted by name.
-4. `menu.py` presents an interactive CLI. Every option reads from the same in-memory `workouts` list - logging a workout (option 5) appends to that list and to the CSV file, and every other option (1-4, 7-10) recalculates its answer from that same list on demand. There's no caching and no separate per-feature dataset, so a newly logged workout is reflected everywhere immediately.
+### Data cleaning
 
-## Empty State
+`loader.py` validates every CSV row before it reaches the analysis layer.
 
-With nothing logged yet, every menu option responds with an explicit, honest message instead of a blank screen or a crash:
+| Data issue | Example | Handling |
+|---|---|---|
+| Alternative date format | `11/05/2026` | Accepts `YYYY-MM-DD` and `DD/MM/YYYY` |
+| Invalid reps or sets | `eight` | Skips the row and reports it |
+| Inconsistent exercise names | ` deadlift ` | Strips whitespace and title-cases the name |
+| Missing weight on a weighted exercise | blank Bench Press weight | Skips the row |
+| Bodyweight exercise | Pull-up with blank weight | Uses reps as the progression metric |
+| Exact duplicate | same session twice | Keeps one entry |
+| Missing workout log | fresh installation | Creates an empty CSV with the required headers |
 
-```
+The app does not silently invent or replace workout values.
+
+### Progression detection
+
+Sessions are grouped by calendar month. The main progression metric is:
+
+- `weight_kg` for weighted exercises
+- `reps` for bodyweight exercises
+
+Recent monthly averages are compared with the preceding period:
+
+- **Progressing:** change greater than `+3%`
+- **Plateau:** change between `-3%` and `+3%`
+- **Regressing:** change below `-3%`
+- **Not enough data:** fewer than two months available
+
+The model is intentionally simple and transparent. It is designed as a practical training indicator, not as a scientific performance model.
+
+### Personal records
+
+For each exercise, `records.py` tracks:
+
+- highest weight logged
+- highest rep count logged
+- the date each record occurred
+
+When a new workout is entered, it is compared with that exercise's previous sessions before being saved. If it sets a new record, the CLI reports it immediately.
+
+## Empty-state behavior
+
+A fresh clone is a valid application state. With no workouts recorded, the program reports zero results or explains that more data is needed instead of failing.
+
+```text
+Progress summary:
 Workouts: 0
 Exercises tracked: 0
 Personal bests: 0
 Plateaus detected: 0
 Regressions detected: 0
 ```
-
-- Progression / personal bests / history → "no data yet, log a workout first"
-- Plateau / regression checks / comparison → "not enough data yet"
-- Export → "no data to export yet"
-
-As soon as the user logs a workout, all of these switch over automatically - there's no separate "demo mode" to turn off.
-
-## Data Cleaning
-
-`loader.py` handles a few real-world imperfections found in the optional sample dataset (`data/sample_workout_log.csv`), and the same rules apply to anything logged manually:
-
-| Issue | Example | Handling |
-|---|---|---|
-| Non-standard date format | `11/05/2026` instead of `2026-05-11` | Both `YYYY-MM-DD` and `DD/MM/YYYY` are parsed |
-| Non-numeric reps | `"eight"` | Row is skipped and reported |
-| Inconsistent exercise naming | `" deadlift "` vs `"Deadlift"` | Names are stripped and title-cased |
-| Missing weight on a weighted exercise | blank `weight_kg` for an Overhead Press session | Treated as a missing value and skipped — **not** confused with a genuine bodyweight exercise |
-| Genuine bodyweight exercise | Pull-up always has blank `weight_kg` | Recognized as bodyweight (an exercise that *never* has a weight logged anywhere in the file) and analyzed by reps instead |
-| Duplicate entry | the same session logged twice | Exact duplicates are removed |
-| Missing/empty log file | fresh install, no `workout_log.csv` yet | A new file with just the header row is created automatically |
-
-Cleaning never silently rewrites a value — a row is either kept as-is or skipped and reported, so the dataset's meaning isn't altered.
-
-## Progression Detection Logic
-
-For each exercise, sessions are grouped by calendar month and averaged (weight for barbell/dumbbell exercises, reps for bodyweight ones). The trend is classified by comparing the most recent one or two months against the one or two months right before them — not the whole history — so a plateau or dip in the last few weeks isn't hidden by earlier progress:
-
-- **Progressing** — recent average is more than 3% above the previous window
-- **Plateau** — change is within ±3%
-- **Regressing** — recent average is more than 3% below the previous window
-
-With fewer than two months of data, the status is reported as "not enough data" instead of forcing a guess.
-
-## Personal Records
-
-`records.py` tracks the best weight and best rep count ever logged per exercise, and replays each exercise's history to flag exactly when a new record was set. If the *most recent* session set a record, the CLI shows a `NEW PERSONAL RECORD!` message with a short motivational line.
-
-The same detection logic runs live: when a new workout is logged (option 5), `entry.py` compares it against that exercise's previous best weight and best reps *before* saving it, and shows the same confirmation and motivational message immediately if it's a new record.
-
-## Comparing Exercises and Progress Summary
-
-`summary.py` builds two cross-exercise views on top of the same `progression.py` and `records.py` functions used everywhere else:
-
-- **Compare exercises** (option 8) — session count, current trend and personal bests for two exercises side by side. Requires data for at least two different exercises.
-- **Progress summary** (option 9) — overall counts: total workouts, exercises tracked, personal bests, and how many exercises are currently flagged as a plateau or a regression.
-
-## Exporting Data
-
-Option 10 writes every currently logged workout to a new timestamped CSV file under `data/exports/`, useful as a manual backup. With nothing logged yet, it reports that there's nothing to export instead of creating an empty file.
-
-## User Profile
-
-On first run, `profile.py` asks for a name, age, sex and training goal (all except name are optional) and saves them to `data/profile.json`. On every later run the profile is loaded automatically and the user is greeted by name; option 6 lets them view or update it at any time. The profile file is excluded from version control via `.gitignore`, since it holds personal data rather than sample/portfolio data.
 
 ## Installation
 
@@ -147,58 +153,42 @@ git clone https://github.com/codeloris/locked-in.git
 cd locked-in
 ```
 
-No dependencies to install — standard library only.
+No package installation is needed because the project uses only the standard library.
 
-## How to Run
+## Run
 
 ```bash
 python main.py
 ```
 
-The app starts empty. To explore it with realistic data instead of logging everything by hand, copy the included demo dataset over the live log before running:
+On the first run, the app creates `data/workout_log.csv` automatically and sets up a small local profile. Both `data/workout_log.csv` and `data/profile.json` are local runtime files and are excluded from version control.
 
-```bash
-cp data/sample_workout_log.csv data/workout_log.csv
-python main.py
+## Example navigation
+
+```text
+========================================
+              LOCKED-IN
+        Workout Progress Tracker
+========================================
+1. Log workout
+2. View progress
+3. Workout history
+4. Profile & data
+0. Exit
 ```
 
-## Example CLI Output
+The main menu contains only the top-level actions. Analysis views are grouped under `View progress`, while profile and export actions are grouped under `Profile & data`.
 
-Logging a first workout and immediately seeing it reflected everywhere:
+## Design decisions
 
-```
-Select an option: 5
-Exercise: Bench Press
-Weight in kg (leave blank if bodyweight): 60
-Reps: 8
-Sets: 3
-Date (YYYY-MM-DD, leave blank for today): 2026-08-28
+The project keeps one source of truth for workout data. `main.py` loads the CSV once into memory, and every feature reads from the same workout list. A newly logged workout is appended both to that list and to the CSV, so the rest of the session immediately sees the updated data.
 
-Workout saved.
+The modules are separated by responsibility: loading, data entry, analysis, records, summaries, export, profile management and CLI navigation. This keeps the calculation logic independent from the user interface and makes the code easier to extend or test without mixing concerns.
 
-Select an option: 9
+## What I learned
 
-Progress summary:
-Workouts: 1
-Exercises tracked: 1
-Personal bests: 1
-Plateaus detected: 0
-Regressions detected: 0
-```
-
-## Future Improvements
-
-- Estimated one-rep max (1RM) using a standard formula
-- A simple text-based trend chart per exercise
-- A "most improved exercise" summary across the whole log
-- Support for multiple separate profiles/logs in the same install
-- Scheduled/automatic exports instead of manual only
-- Unit tests for the progression-detection and record logic
-
-## What I Learned
-
-The biggest architectural lesson here wasn't the trend math - it was resisting the temptation to ship a pre-populated demo as the default state. Making "zero workouts" a fully supported, explicitly handled state (rather than an edge case bolted on later) forced every module to read from one real source of truth instead of assuming data would always be there. Keeping the demo dataset available but opt-in, instead of auto-loaded, was a small decision that made the whole app honestly reflect what the user has actually logged.
+This project reinforced three practical software-design ideas: treating an empty dataset as a normal state, keeping a single source of truth, and separating analysis logic from interface logic. The final CLI also groups related actions by user intent instead of exposing every function as an equal top-level menu choice.
 
 ## License
 
-This project is for personal/portfolio use.
+This project is for personal and portfolio use.

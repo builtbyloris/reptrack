@@ -1,34 +1,48 @@
 """
 ==================== menu.py ====================
 
-This module is the command-line interface: it displays the menu,
-reads user input and calls into the other modules to show results.
+Command-line interface for locked-in.
 
-It does not implement any analysis logic itself - all calculations
-live in progression.py, records.py, summary.py and export.py. The
-menu only routes choices and formats output, and it always checks
-whether there's any data before asking for more input, so an empty
-log never causes a crash or a confusing question.
+This module owns navigation and output formatting only. Analysis,
+storage and profile logic remain in their dedicated modules. The
+navigation is grouped by user intent so the main menu stays focused
+on the actions used most often.
 """
 
 from locked_in import entry, export, profile, progression, records, summary
 
-MENU_TEXT = """
+MAIN_MENU_TEXT = """
 ========================================
-             LOCKED-IN
-       Workout Progress Tracker
+              LOCKED-IN
+        Workout Progress Tracker
 ========================================
-1. Show progression for an exercise
-2. Show personal bests
-3. Check for plateaus
-4. Check for regressions
-5. Log a new workout
-6. View / update profile
-7. View workout history
-8. Compare exercises
-9. View progress summary
-10. Export workout data
+1. Log workout
+2. View progress
+3. Workout history
+4. Profile & data
 0. Exit
+"""
+
+PROGRESS_MENU_TEXT = """
+========================================
+            YOUR PROGRESS
+========================================
+1. Progress summary
+2. Exercise progression
+3. Personal bests
+4. Plateaus
+5. Regressions
+6. Compare exercises
+0. Back
+"""
+
+PROFILE_DATA_MENU_TEXT = """
+========================================
+           PROFILE & DATA
+========================================
+1. View / update profile
+2. Export workout data
+0. Back
 """
 
 
@@ -37,44 +51,81 @@ def run(workouts, csv_path, user_profile, profile_path, export_dir):
     print(f"Loaded {len(workouts)} workout entries.")
 
     while True:
-        print(MENU_TEXT)
+        print(MAIN_MENU_TEXT)
         choice = input("Select an option: ").strip()
 
         if choice == "1":
-            show_progression(workouts)
-        elif choice == "2":
-            show_personal_bests(workouts)
-        elif choice == "3":
-            show_by_status(workouts, "PLATEAU")
-        elif choice == "4":
-            show_by_status(workouts, "REGRESSING")
-        elif choice == "5":
             entry.add_workout(workouts, csv_path)
-        elif choice == "6":
-            user_profile = show_profile(user_profile, profile_path)
-        elif choice == "7":
+        elif choice == "2":
+            _run_progress_menu(workouts)
+        elif choice == "3":
             show_history(workouts)
-        elif choice == "8":
-            show_comparison(workouts)
-        elif choice == "9":
-            show_summary(workouts)
-        elif choice == "10":
-            show_export(workouts, export_dir)
+        elif choice == "4":
+            user_profile = _run_profile_data_menu(
+                workouts,
+                user_profile,
+                profile_path,
+                export_dir,
+            )
         elif choice == "0":
             print("See you at the next session.")
             break
         else:
-            print("Invalid option, please choose one of the numbers shown.\n")
+            _print_invalid_option()
+
+
+def _run_progress_menu(workouts):
+    """Show analysis-related views under one focused submenu."""
+    while True:
+        print(PROGRESS_MENU_TEXT)
+        choice = input("Select an option: ").strip()
+
+        if choice == "1":
+            show_summary(workouts)
+        elif choice == "2":
+            show_progression(workouts)
+        elif choice == "3":
+            show_personal_bests(workouts)
+        elif choice == "4":
+            show_by_status(workouts, "PLATEAU")
+        elif choice == "5":
+            show_by_status(workouts, "REGRESSING")
+        elif choice == "6":
+            show_comparison(workouts)
+        elif choice == "0":
+            return
+        else:
+            _print_invalid_option()
+
+
+def _run_profile_data_menu(workouts, user_profile, profile_path, export_dir):
+    """Group personal settings and data-management actions."""
+    while True:
+        print(PROFILE_DATA_MENU_TEXT)
+        choice = input("Select an option: ").strip()
+
+        if choice == "1":
+            user_profile = show_profile(user_profile, profile_path)
+        elif choice == "2":
+            show_export(workouts, export_dir)
+        elif choice == "0":
+            return user_profile
+        else:
+            _print_invalid_option()
 
 
 def _available_exercises(workouts):
     return sorted({w["exercise"] for w in workouts})
 
 
+def _print_invalid_option():
+    print("Invalid option, please choose one of the numbers shown.\n")
+
+
 def show_progression(workouts):
     exercises = _available_exercises(workouts)
     if not exercises:
-        print("\nNo workouts logged yet. Use option 5 to log your first workout.\n")
+        print("\nNo workouts logged yet. Log your first workout from the main menu.\n")
         return
 
     print("\nAvailable exercises:", ", ".join(exercises))
@@ -90,8 +141,8 @@ def show_progression(workouts):
     unit = "kg" if metric == "weight_kg" else "reps"
 
     print(f"\n{sessions[0]['exercise']} progression:")
-    for a in averages:
-        print(f"{_format_month(a['month'])}: avg {a['average']:.1f} {unit}")
+    for average in averages:
+        print(f"{_format_month(average['month'])}: avg {average['average']:.1f} {unit}")
 
     if status == "NOT ENOUGH DATA":
         print("Trend: not enough data yet to tell.\n")
@@ -110,7 +161,7 @@ def _report_latest_record(sessions):
 
     last_session, record_type = new_records[-1]
     if last_session["date"] != sessions[-1]["date"]:
-        return  # the most recent session did not set a record
+        return
 
     label = "weight" if record_type == "weight" else "reps"
     print(f"NEW PERSONAL RECORD! ({label})")
@@ -143,27 +194,32 @@ def show_by_status(workouts, target_status):
         return
 
     matches = []
+    analyzable_exercises = 0
     for exercise in exercises:
         sessions = progression.get_exercise_sessions(workouts, exercise)
         averages, _ = progression.monthly_averages(sessions)
         status, change_percent = progression.classify_trend(averages)
+        if status == "NOT ENOUGH DATA":
+            continue
+
+        analyzable_exercises += 1
         if status == target_status:
             matches.append((exercise, change_percent))
 
+    if analyzable_exercises == 0:
+        print(f"\nNot enough monthly data yet to check for {label}.\n")
+        return
+
     print(f"\nExercises with detected {label}:")
     if not matches:
-        print("None found - nice.")
+        print("None found.")
     for exercise, change_percent in matches:
         print(f"- {exercise} ({change_percent}%)")
     print()
 
 
 def show_profile(user_profile, profile_path):
-    """Display the current profile and offer to update it.
-
-    Returns the (possibly updated) profile so the caller keeps a
-    fresh copy for the rest of the session.
-    """
+    """Display the current profile and offer to update it."""
     print("\nYour profile:")
     for field in ("name", "age", "sex", "goal", "created_on"):
         value = user_profile.get(field) or "-"
@@ -186,16 +242,26 @@ def show_history(workouts):
         return
 
     print("\nWorkout history:")
-    for w in sorted(workouts, key=lambda w: w["date"]):
-        weight_text = f"{w['weight_kg']:g} kg" if w["weight_kg"] is not None else "bodyweight"
-        print(f"- {w['date']} | {w['exercise']}: {weight_text}, {w['reps']} reps x {w['sets']} sets")
+    for workout in sorted(workouts, key=lambda item: item["date"]):
+        weight_text = (
+            f"{workout['weight_kg']:g} kg"
+            if workout["weight_kg"] is not None
+            else "bodyweight"
+        )
+        print(
+            f"- {workout['date']} | {workout['exercise']}: "
+            f"{weight_text}, {workout['reps']} reps x {workout['sets']} sets"
+        )
     print()
 
 
 def show_comparison(workouts):
     exercises = _available_exercises(workouts)
     if len(exercises) < 2:
-        print("\nNot enough data yet - log workouts for at least two different exercises to compare.\n")
+        print(
+            "\nNot enough data yet - log workouts for at least two "
+            "different exercises to compare.\n"
+        )
         return
 
     print("\nAvailable exercises:", ", ".join(exercises))
@@ -211,8 +277,16 @@ def show_comparison(workouts):
             print(f"{exercise}: no data logged yet.")
             continue
 
-        status_text = "not enough data" if stats["status"] == "NOT ENOUGH DATA" else stats["status"].title()
-        print(f"{exercise}: {stats['sessions']} session(s), trend {status_text} ({stats['change_percent']}%)")
+        if stats["status"] == "NOT ENOUGH DATA":
+            print(
+                f"{exercise}: {stats['sessions']} session(s), "
+                "trend not enough data"
+            )
+        else:
+            print(
+                f"{exercise}: {stats['sessions']} session(s), "
+                f"trend {stats['status'].title()} ({stats['change_percent']}%)"
+            )
         if stats["best_weight"] is not None:
             print(f"  best weight: {stats['best_weight']:g} kg")
         print(f"  best reps: {stats['best_reps']}")
@@ -241,4 +315,5 @@ def show_export(workouts, export_dir):
 def _format_month(month_key):
     """Turn '2026-04' into 'Apr 2026'."""
     from datetime import datetime
+
     return datetime.strptime(month_key, "%Y-%m").strftime("%b %Y")
