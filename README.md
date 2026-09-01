@@ -1,14 +1,14 @@
-# locked-in
+# RepTrack
 
 A command-line workout tracker that turns a personal training log into clear progress insights: trends, personal bests, plateaus and regressions.
 
 ## Why this project
 
-A workout log is easy to collect but harder to interpret. `locked-in` answers a practical question:
+A workout log is easy to collect but harder to interpret. RepTrack answers a practical question:
 
 > **Am I actually getting better?**
 
-The app starts with an empty workout log and derives every result from the data the user records. No demo data is loaded automatically and no analysis is hardcoded.
+The app starts with an empty workout log and derives every result from the data recorded by the user. No demo data is loaded automatically and no analysis is hardcoded.
 
 ## Core workflow
 
@@ -24,10 +24,10 @@ progression / records / summary
 progress insights
 ```
 
-The CLI is organized around four user intentions:
+The CLI is organized around four main user intentions:
 
 ```text
-LOCKED-IN
+REPTRACK
 ├── Log workout
 ├── View progress
 │   ├── Progress summary
@@ -44,38 +44,38 @@ LOCKED-IN
 
 ## Features
 
-- Log workouts directly from the CLI
-- Track weighted and bodyweight exercises
-- View monthly progression for a single exercise
-- Classify recent performance as `Progressing`, `Plateau` or `Regressing`
-- Track personal bests for weight and reps
-- Detect a new personal record immediately after logging a workout
-- Review complete workout history
-- Compare two exercises side by side
-- View an overall progress summary
-- Export the current workout log to a timestamped CSV backup
-- Create and update a local user profile
-- Handle empty, missing or partially invalid data without crashing
+* Log workouts directly from the CLI
+* Track weighted and bodyweight exercises
+* View monthly progression for a single exercise
+* Classify recent performance as `Progressing`, `Plateau` or `Regressing`
+* Track personal bests for weight and reps
+* Detect a new personal record immediately after logging a workout
+* Review complete workout history
+* Compare two exercises side by side
+* View an overall progress summary
+* Export the current workout log to a timestamped CSV backup
+* Create and update a local user profile
+* Handle empty, missing or partially invalid data without crashing
 
 ## Tech stack
 
-- Python 3.10+
-- Python standard library only
-- CSV for workout persistence
-- JSON for profile persistence
+* Python 3.10+
+* Python standard library only
+* CSV for workout persistence
+* JSON for profile persistence
 
 No external dependencies are required.
 
 ## Project structure
 
 ```text
-locked-in/
+reptrack/
 ├── data/
 │   ├── workout_log.csv         # generated locally on first run; ignored by git
 │   ├── profile.json            # generated locally; ignored by git
 │   └── exports/                # generated on demand; ignored by git
 ├── src/
-│   └── locked_in/
+│   └── reptrack/
 │       ├── loader.py           # load, clean and validate workout data
 │       ├── entry.py            # add new workouts
 │       ├── progression.py      # monthly averages and trend detection
@@ -95,31 +95,33 @@ locked-in/
 
 `loader.py` validates every CSV row before it reaches the analysis layer.
 
-| Data issue | Example | Handling |
-|---|---|---|
-| Alternative date format | `11/05/2026` | Accepts `YYYY-MM-DD` and `DD/MM/YYYY` |
-| Invalid reps or sets | `eight` | Skips the row and reports it |
-| Inconsistent exercise names | ` deadlift ` | Strips whitespace and title-cases the name |
-| Missing weight on a weighted exercise | blank Bench Press weight | Skips the row |
-| Bodyweight exercise | Pull-up with blank weight | Uses reps as the progression metric |
-| Exact duplicate | same session twice | Keeps one entry |
-| Missing workout log | fresh installation | Creates an empty CSV with the required headers |
+| Data issue                            | Example                   | Handling                                       |
+| ------------------------------------- | ------------------------- | ---------------------------------------------- |
+| Alternative date format               | `11/05/2026`              | Accepts `YYYY-MM-DD` and `DD/MM/YYYY`          |
+| Invalid reps or sets                  | `eight`                   | Skips the row and reports it                   |
+| Inconsistent exercise names           | `deadlift`                | Strips whitespace and title-cases the name     |
+| Missing weight on a weighted exercise | blank Bench Press weight  | Skips the row                                  |
+| Bodyweight exercise                   | Pull-up with blank weight | Uses reps as the progression metric            |
+| Exact duplicate                       | same session twice        | Keeps one entry                                |
+| Missing workout log                   | fresh installation        | Creates an empty CSV with the required headers |
 
 The app does not silently invent or replace workout values.
 
 ### Progression detection
 
-Sessions are grouped by calendar month. The main progression metric is:
+Sessions are grouped by calendar month.
 
-- `weight_kg` for weighted exercises
-- `reps` for bodyweight exercises
+The main progression metric is:
+
+* `weight_kg` for weighted exercises
+* `reps` for bodyweight exercises
 
 Recent monthly averages are compared with the preceding period:
 
-- **Progressing:** change greater than `+3%`
-- **Plateau:** change between `-3%` and `+3%`
-- **Regressing:** change below `-3%`
-- **Not enough data:** fewer than two months available
+* **Progressing:** change greater than `+3%`
+* **Plateau:** change between `-3%` and `+3%`
+* **Regressing:** change below `-3%`
+* **Not enough data:** fewer than two months available
 
 The model is intentionally simple and transparent. It is designed as a practical training indicator, not as a scientific performance model.
 
@@ -127,15 +129,19 @@ The model is intentionally simple and transparent. It is designed as a practical
 
 For each exercise, `records.py` tracks:
 
-- highest weight logged
-- highest rep count logged
-- the date each record occurred
+* highest weight logged
+* highest rep count logged
+* the date each record occurred
 
-When a new workout is entered, it is compared with that exercise's previous sessions before being saved. If it sets a new record, the CLI reports it immediately.
+When a new workout is entered, it is compared with that exercise's previous sessions before being saved.
+
+If it sets a new personal record, the CLI reports it immediately.
 
 ## Empty-state behavior
 
-A fresh clone is a valid application state. With no workouts recorded, the program reports zero results or explains that more data is needed instead of failing.
+A fresh clone is a valid application state.
+
+With no workouts recorded, the program reports zero results or explains that more data is needed instead of failing.
 
 ```text
 Progress summary:
@@ -148,47 +154,99 @@ Regressions detected: 0
 
 ## Installation
 
+Clone the repository:
+
 ```bash
-git clone https://github.com/codeloris/locked-in.git
-cd locked-in
+git clone https://github.com/codeloris/reptrack.git
+cd reptrack
 ```
 
-No package installation is needed because the project uses only the standard library.
+No package installation is required because the project uses only the Python standard library.
 
 ## Run
+
+Start the application with:
 
 ```bash
 python main.py
 ```
 
-On the first run, the app creates `data/workout_log.csv` automatically and sets up a small local profile. Both `data/workout_log.csv` and `data/profile.json` are local runtime files and are excluded from version control.
+On the first run, RepTrack creates `data/workout_log.csv` automatically and sets up a local user profile.
+
+Both `data/workout_log.csv` and `data/profile.json` are runtime files and are excluded from version control.
 
 ## Example navigation
 
 ```text
 ========================================
-              LOCKED-IN
+               REPTRACK
         Workout Progress Tracker
 ========================================
+
 1. Log workout
 2. View progress
 3. Workout history
 4. Profile & data
+
 0. Exit
 ```
 
-The main menu contains only the top-level actions. Analysis views are grouped under `View progress`, while profile and export actions are grouped under `Profile & data`.
+The main menu contains only top-level actions.
+
+Analysis views are grouped under `View progress`, while profile and export actions are grouped under `Profile & data`.
+
+This keeps the CLI compact and avoids exposing every feature at the same navigation level.
 
 ## Design decisions
 
-The project keeps one source of truth for workout data. `main.py` loads the CSV once into memory, and every feature reads from the same workout list. A newly logged workout is appended both to that list and to the CSV, so the rest of the session immediately sees the updated data.
+### Single source of truth
 
-The modules are separated by responsibility: loading, data entry, analysis, records, summaries, export, profile management and CLI navigation. This keeps the calculation logic independent from the user interface and makes the code easier to extend or test without mixing concerns.
+The project keeps one source of truth for workout data.
+
+`main.py` loads the workout log into memory and every feature reads from the same workout list.
+
+When a new workout is logged, it is appended both to the in-memory list and to the CSV file, so the rest of the current session immediately sees the updated data.
+
+### Separation of responsibilities
+
+The modules are separated by responsibility:
+
+* data loading and validation
+* workout entry
+* progression analysis
+* personal records
+* summaries and comparisons
+* data export
+* profile management
+* CLI navigation
+
+This keeps calculation logic separate from interface logic and makes the code easier to understand, maintain and test.
+
+### Local-first design
+
+RepTrack is intentionally lightweight.
+
+It does not require:
+
+* a database
+* an external API
+* an internet connection
+* third-party Python libraries
+
+Workout and profile data remain stored locally on the user's machine.
 
 ## What I learned
 
-This project reinforced three practical software-design ideas: treating an empty dataset as a normal state, keeping a single source of truth, and separating analysis logic from interface logic. The final CLI also groups related actions by user intent instead of exposing every function as an equal top-level menu choice.
+This project reinforced several practical software-development concepts:
 
-## License
+* treating an empty dataset as a normal application state
+* validating data before analysis
+* maintaining a single source of truth
+* separating business logic from interface logic
+* organizing modules by responsibility
+* designing CLI navigation around user intentions instead of individual functions
+* handling persistence without external dependencies
+* translating raw workout data into simple, interpretable progress indicators
 
-This project is for personal and portfolio use.
+RepTrack started as a basic workout logger and evolved into a small structured application focused on clean architecture, reliable data handling and understandable progress analysis.
+
